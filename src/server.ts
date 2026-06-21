@@ -60,11 +60,19 @@ app.get("/api/conversations/:id/memory", async (req, res) => {
   res.json(facts);
 });
 
+// Get failure simulation state
+let _failureEnabled = false;
+
 // Toggle failure simulation
 app.post("/api/simulate-failure", (req, res) => {
   const { enabled } = req.body;
-  setSimulateFailure(!!enabled);
-  res.json({ simulateFailure: !!enabled });
+  _failureEnabled = !!enabled;
+  setSimulateFailure(_failureEnabled);
+  res.json({ simulateFailure: _failureEnabled });
+});
+
+app.get("/api/simulate-failure", (_req, res) => {
+  res.json({ simulateFailure: _failureEnabled });
 });
 
 // Chat endpoint with SSE streaming

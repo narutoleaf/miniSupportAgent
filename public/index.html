@@ -782,8 +782,15 @@
     }
   });
 
-  // Init: load conversations from DB
+  async function syncFailureToggle() {
+    const res = await fetch(`${API}/api/simulate-failure`);
+    const { simulateFailure } = await res.json();
+    document.getElementById('failToggle').checked = simulateFailure;
+  }
+
+  // Init
   loadConversations();
+  syncFailureToggle();
 </script>
 
 </body>
