@@ -98,30 +98,55 @@ Edit `.env` and set your OpenAI API key:
 OPENAI_API_KEY=sk-proj-your-key-here
 ```
 
-### 3. Start Postgres with Docker
+### 3. Set up Postgres
+
+#### Option A: Using Docker (recommended)
 
 ```bash
 docker compose up -d
 ```
 
-This starts a Postgres 16 container and **automatically runs `schema.sql`** on first startup (via Docker's `docker-entrypoint-initdb.d` mount). The 5 tables (`conversations`, `messages`, `long_term_memory`, `tool_call_logs`, `turn_metrics`) are created automatically.
+This starts a Postgres 16 container and **automatically runs `schema.sql`** on first startup. No extra steps needed.
 
-To verify the database is ready:
+To verify:
 
 ```bash
 docker exec store_agent_db pg_isready -U agent_user -d store_agent
 ```
 
-**If you need to re-apply the schema** (e.g. after dropping tables or on an existing Postgres instance without Docker), run:
+#### Option B: Using your own Postgres
+
+If you already have Postgres installed locally (no Docker), create the database and apply the schema manually:
 
 ```bash
-npm run db:migrate
+# Create database and user
+psql -U postgres -c "CREATE USER agent_user WITH PASSWORD 'agent_pass';"
+psql -U postgres -c "CREATE DATABASE store_agent OWNER agent_user;"
+
+# Apply schema
+psql -U agent_user -d store_agent -f schema.sql
 ```
 
-Or apply it manually:
+Then update `.env` to match your Postgres connection:
+
+```
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_DB=store_agent
+POSTGRES_USER=agent_user
+POSTGRES_PASSWORD=agent_pass
+```
+
+#### Re-applying the schema
+
+If you need to re-apply `schema.sql` at any point (all tables use `IF NOT EXISTS` so it's safe to re-run):
 
 ```bash
-docker exec -i store_agent_db psql -U agent_user -d store_agent < schema.sql
+# Via npm script
+npm run db:migrate
+
+# Or directly with psql
+psql -U agent_user -d store_agent -f schema.sql
 ```
 
 ### 4. Start the agent
