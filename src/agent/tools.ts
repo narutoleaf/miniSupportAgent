@@ -57,7 +57,7 @@ export function createTools(conversationId: string) {
   return {
     lookupOrderStatus: tool({
       description: "Look up order status by order ID. If the order is lost or has a serious issue, automatically call escalateToHuman.",
-      parameters: z.object({
+      inputSchema: z.object({
         orderId: z.string().describe("Order ID, e.g. ORD-001"),
       }),
       execute: async ({ orderId }) => {
@@ -66,15 +66,15 @@ export function createTools(conversationId: string) {
             throw new Error("Service unavailable: order tracking system is down");
           }
           const order = ORDERS[orderId];
-          if (!order) return { found: false, message: `Order ${orderId} not found` };
-          return { found: true, ...order, orderId };
+          if (!order) return { found: false as const, message: `Order ${orderId} not found` };
+          return { found: true as const, ...order, orderId };
         });
       },
     }),
 
     checkInventory: tool({
       description: "Check product stock level by SKU. Optionally filter by store.",
-      parameters: z.object({
+      inputSchema: z.object({
         productId: z.string().describe("Product SKU, e.g. SKU-100"),
         storeId: z.string().optional().describe("Store ID, e.g. store-hcm"),
       }),
@@ -84,32 +84,32 @@ export function createTools(conversationId: string) {
             throw new Error("Database connection timeout: inventory service unavailable");
           }
           const item = INVENTORY[productId];
-          if (!item) return { found: false, message: `Product ${productId} not found` };
+          if (!item) return { found: false as const, message: `Product ${productId} not found` };
           if (storeId && item.store !== storeId) {
-            return { found: true, name: item.name, stock: 0, store: storeId, message: "Product not available at this store" };
+            return { found: true as const, name: item.name, stock: 0, store: storeId, message: "Product not available at this store" };
           }
-          return { found: true, ...item, productId };
+          return { found: true as const, ...item, productId };
         });
       },
     }),
 
     getStoreInfo: tool({
       description: "Get store information: address, phone number, opening hours.",
-      parameters: z.object({
+      inputSchema: z.object({
         storeId: z.string().describe("Store ID, e.g. store-hcm, store-hn, store-dn"),
       }),
       execute: async ({ storeId }) => {
         return withLogging(conversationId, "getStoreInfo", { storeId }, () => {
           const store = STORES[storeId];
-          if (!store) return { found: false, message: `Store ${storeId} not found` };
-          return { found: true, ...store, storeId };
+          if (!store) return { found: false as const, message: `Store ${storeId} not found` };
+          return { found: true as const, ...store, storeId };
         });
       },
     }),
 
     escalateToHuman: tool({
       description: "Escalate issue to a human support agent. Use when an order is lost, customer requests it, or the issue cannot be resolved automatically.",
-      parameters: z.object({
+      inputSchema: z.object({
         reason: z.string().describe("Reason for escalation"),
         orderId: z.string().optional().describe("Related order ID if applicable"),
         priority: z.enum(["low", "medium", "high"]).default("medium").describe("Priority level"),

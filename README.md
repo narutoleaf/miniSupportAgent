@@ -1,18 +1,23 @@
 # Store Support Agent
 
-A tool-using customer support agent with persistent memory for retail store management. Built with TypeScript, Vercel AI SDK, and Postgres.
+A tool-using customer support agent with persistent memory for retail store management. Built with TypeScript, Vercel AI SDK v6, and Postgres.
 
 ## Architecture
 
 ```mermaid
 flowchart TB
-    User([User via CLI]) --> CLI[cli.ts]
-    CLI --> Agent[agent/index.ts<br/>runTurn]
+    User([User]) --> UI[Web UI\nlocalhost:3000]
+    User --> CLI[CLI\ncli.ts]
+    UI --> Server[Express Server\nserver.ts]
+    CLI --> Agent
+
+    Server -->|SSE stream| UI
+    Server --> Agent[agent/index.ts\nrunTurn]
 
     subgraph Agent Loop
-        Agent --> Memory[memory.ts<br/>extractAndSaveMemory]
-        Agent --> Context[context.ts<br/>buildContext]
-        Agent --> LLM[streamText<br/>GPT-4o + Tools]
+        Agent --> Memory[memory.ts\nextractAndSaveMemory]
+        Agent --> Context[context.ts\nbuildContext]
+        Agent --> LLM[streamText\nGPT-4o + Tools]
     end
 
     subgraph Tools
@@ -27,9 +32,9 @@ flowchart TB
     end
 
     subgraph Context Reconstruction
-        Context --> Recent[Recent N turns<br/>verbatim]
-        Context --> Summary[Older turns<br/>summarized by LLM]
-        Context --> Facts[Long-term memory<br/>facts injected]
+        Context --> Recent[Recent N turns\nverbatim]
+        Context --> Summary[Older turns\nsummarized by LLM]
+        Context --> Facts[Long-term memory\nfacts injected]
     end
 
     Memory -->|extract facts| MiniLLM[GPT-4o-mini]
@@ -53,49 +58,108 @@ flowchart TB
 
 ## Features
 
+- **Web UI** with real-time SSE streaming, markdown rendering, typing indicator, and tool call visualization
+- **CLI interface** for terminal-based interaction
 - **Multi-turn conversations** persisted in Postgres, resumable after restart
 - **4 tools**: order lookup, inventory check, store info, human escalation
 - **Tool chain**: lost order → automatic escalation with ticket creation
 - **Long-term memory**: extracts customer facts (name, preferences) and recalls them in later turns
 - **Context reconstruction**: summarizes old turns + injects recent turns verbatim + memory facts, all within a token budget
-- **Graceful failure handling**: tool errors are caught, logged, and the agent informs the user naturally
+- **Graceful failure handling**: tool errors are caught, logged to Postgres, and the agent informs the user naturally
 - **Per-turn metrics**: latency (ms) and token usage (input/output) logged to Postgres
+- **OpenAPI documentation** via Swagger UI
+- **Security hardening**: XSS escaping, UUID validation, message length limits, prompt injection guardrails
 
 ## Prerequisites
 
-- Node.js 18+
-- Docker & Docker Compose
-- OpenAI API key
+- [Node.js](https://nodejs.org/) 18+
+- [Docker](https://www.docker.com/) & Docker Compose
+- [OpenAI API key](https://platform.openai.com/api-keys)
 
-## Setup
+## Quick Start
 
-1. **Clone and install**
+### 1. Clone and install
 
 ```bash
-git clone <repo-url> && cd store-support-agent
+git clone https://github.com/narutoleaf/miniSupportAgent.git
+cd miniSupportAgent
 npm install
 ```
 
-2. **Configure environment**
+### 2. Configure environment
 
 ```bash
 cp .env.example .env
-# Edit .env and add your OPENAI_API_KEY
 ```
 
-3. **Start Postgres**
+Edit `.env` and set your OpenAI API key:
+
+```
+OPENAI_API_KEY=sk-proj-your-key-here
+```
+
+### 3. Start Postgres with Docker
 
 ```bash
 docker compose up -d
 ```
 
-The schema is auto-applied on first run via `docker-entrypoint-initdb.d`.
+This starts a Postgres 16 container and **automatically runs `schema.sql`** on first startup (via Docker's `docker-entrypoint-initdb.d` mount). The 5 tables (`conversations`, `messages`, `long_term_memory`, `tool_call_logs`, `turn_metrics`) are created automatically.
 
-4. **Start the agent**
+To verify the database is ready:
+
+```bash
+docker exec store_agent_db pg_isready -U agent_user -d store_agent
+```
+
+**If you need to re-apply the schema** (e.g. after dropping tables or on an existing Postgres instance without Docker), run:
+
+```bash
+npm run db:migrate
+```
+
+Or apply it manually:
+
+```bash
+docker exec -i store_agent_db psql -U agent_user -d store_agent < schema.sql
+```
+
+### 4. Start the agent
+
+```bash
+# Web UI (recommended)
+npm run dev:ui
+
+# Then open http://localhost:3000
+```
+
+Or use CLI mode:
 
 ```bash
 npm run dev
 ```
+
+### 5. Chat with the agent
+
+**Web UI** — open http://localhost:3000, click "+ New Conversation", and start chatting.
+
+**CLI** — type `/new` to create a session, then type your messages.
+
+Try these:
+- `Check order ORD-003` — triggers tool chain (lookupOrderStatus → escalateToHuman)
+- `My name is Alex and I prefer email` — extracts memory facts
+- `Is SKU-100 in stock?` — checks inventory
+- `What are the hours for store-hcm?` — gets store info
+
+## Web UI
+
+Open **http://localhost:3000** after starting with `npm run dev:ui`.
+
+- **Sidebar**: create, select, and delete conversations (persisted across restarts)
+- **Chat area**: streamed responses with markdown rendering and tool call indicators (spinner → checkmark)
+- **Memory panel**: click "Memory" to view extracted customer facts
+- **Failure simulation**: toggle to test graceful error handling
+- **API docs**: http://localhost:3000/api-docs (Swagger UI)
 
 ## CLI Commands
 
@@ -107,28 +171,19 @@ npm run dev
 | `/fail off` | Disable tool failure simulation |
 | `/quit` | Exit |
 
-## Example Session
+## API Endpoints
 
-```
-==================================================
-  Store Support Agent
-==================================================
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/conversations` | List all conversations |
+| `POST` | `/api/conversations` | Create a new conversation |
+| `DELETE` | `/api/conversations/:id` | Delete a conversation and all its data |
+| `GET` | `/api/conversations/:id/messages` | Get all messages in a conversation |
+| `POST` | `/api/conversations/:id/chat` | Send message and receive SSE stream |
+| `GET` | `/api/conversations/:id/memory` | Get extracted memory facts |
+| `POST` | `/api/simulate-failure` | Toggle tool failure simulation |
 
-[no session] You: /new
-New session created: a1b2c3d4-...
-
-[a1b2c3d4] You: My name is David, I prefer email for contact.
-Assistant: Chào David! Cảm ơn bạn đã chia sẻ...
-
-[a1b2c3d4] You: Check order ORD-003
-Assistant: Đơn hàng ORD-003 đã bị thất lạc. Tôi đã tạo phiếu hỗ trợ TK-...
-
-[a1b2c3d4] You: /fail on
-Simulate failure: ON — tool calls will fail.
-
-[a1b2c3d4] You: Check order ORD-001
-Assistant: Xin lỗi, hệ thống tra cứu đơn hàng hiện đang gặp sự cố...
-```
+Full OpenAPI spec available at `/api-docs`.
 
 ## Available Tools
 
@@ -149,30 +204,44 @@ Assistant: Xin lỗi, hệ thống tra cứu đơn hàng hiện đang gặp sự
 
 ## Eval Suite
 
-Run the 10-case evaluation suite:
+Run the 11-case evaluation suite:
 
 ```bash
 npm run eval
 ```
 
-Tests cover: order lookup, tool chaining, inventory, store info, memory extraction, graceful failure, multi-turn context, and multi-tool conversations.
+Tests cover: order lookup, tool chaining, inventory, store info, memory extraction, graceful failure, multi-turn context, multi-tool conversations, and context reconstruction with summarization.
 
 ## Database Schema
 
-5 tables in `schema.sql`:
+5 tables in `schema.sql` (auto-applied by Docker on first run):
 
-- `conversations` — session metadata
-- `messages` — full message history per conversation
-- `long_term_memory` — extracted customer facts (key/value)
-- `tool_call_logs` — every tool call with input, output, error, and duration
-- `turn_metrics` — latency and token usage per turn
+| Table | Purpose |
+|-------|---------|
+| `conversations` | Session metadata |
+| `messages` | Full message history per conversation (role, content, timestamps) |
+| `long_term_memory` | Extracted customer facts as key/value pairs |
+| `tool_call_logs` | Every tool call with input, output, error, and duration_ms |
+| `turn_metrics` | Latency and token usage (input/output) per turn |
 
 ## Scripts
 
 | Script | Description |
 |--------|-------------|
-| `npm run dev` | Start the CLI agent (ts-node) |
+| `npm run dev:ui` | Start the web UI + API server |
+| `npm run dev` | Start the CLI agent |
+| `npm run eval` | Run the eval suite (11 test cases) |
 | `npm run build` | Compile TypeScript to `dist/` |
-| `npm start` | Run compiled agent |
-| `npm run eval` | Run eval suite |
-| `npm run db:migrate` | Apply schema to Postgres manually |
+| `npm start` | Run compiled CLI agent |
+| `npm run db:migrate` | Apply `schema.sql` to Postgres manually |
+| `npm run typecheck` | Run TypeScript type checking |
+
+## Security
+
+- All SQL queries use parameterized placeholders (no string concatenation)
+- User-controlled data is HTML-escaped before DOM insertion (XSS prevention)
+- Markdown output sanitized via DOMPurify
+- Route parameters validated as UUID format
+- Message length capped at 2000 characters, request body limited to 16kb
+- System prompt includes guardrails against prompt injection and role manipulation
+- Memory facts explicitly labeled as data (not instructions) in the prompt

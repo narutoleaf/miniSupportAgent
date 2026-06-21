@@ -10,6 +10,19 @@ export async function createConversation(metadata: Record<string, unknown> = {})
   return res.rows[0].id;
 }
 
+export async function listConversations() {
+  const res = await db.query<{ id: string; created_at: Date; preview: string | null }>(
+    `SELECT c.id, c.created_at,
+       (SELECT content FROM messages WHERE conversation_id = c.id AND role = 'user' ORDER BY created_at ASC LIMIT 1) AS preview
+     FROM conversations c ORDER BY c.created_at DESC LIMIT 50`
+  );
+  return res.rows;
+}
+
+export async function deleteConversation(conversationId: string) {
+  await db.query("DELETE FROM conversations WHERE id = $1", [conversationId]);
+}
+
 export async function conversationExists(conversationId: string) {
   const res = await db.query<{ exists: boolean }>(
     "SELECT EXISTS(SELECT 1 FROM conversations WHERE id = $1) AS exists",

@@ -23,7 +23,7 @@ export async function extractAndSaveMemory(
       system: EXTRACTION_PROMPT,
       prompt: userMessage,
       temperature: 0,
-      maxTokens: 300,
+      maxOutputTokens: 300,
     });
 
     const cleaned = text.replace(/```json?\n?/g, "").replace(/```/g, "").trim();

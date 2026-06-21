@@ -7,8 +7,10 @@ export type EvalCase = {
     toolsCalled?: string[];
     memoryKeysExist?: string[];
     toolErrorLogged?: boolean;
+    contextSummarized?: boolean;
   };
   simulateFailure?: boolean;
+  recentTurnsOverride?: number;
 };
 
 export const evalCases: EvalCase[] = [
@@ -17,7 +19,7 @@ export const evalCases: EvalCase[] = [
     description: "Look up an existing order and get status info",
     turns: ["Can you check order ORD-001 for me?"],
     assertions: {
-      responseContainsAny: [["ORD-001"], ["delivered", "giao"]],
+      responseContainsAny: [["ORD-001"], ["delivered", "Delivered"]],
       toolsCalled: ["lookupOrderStatus"],
     },
   },
@@ -35,7 +37,7 @@ export const evalCases: EvalCase[] = [
     description: "Lost order triggers automatic escalation to human agent",
     turns: ["I need help with order ORD-003"],
     assertions: {
-      responseContainsAny: [["ORD-003"], ["lost", "escalat", "ticket", "TK-", "thất lạc", "hỗ trợ", "phiếu"]],
+      responseContainsAny: [["ORD-003"], ["lost", "escalat", "ticket", "TK-", "support"]],
       toolsCalled: ["lookupOrderStatus", "escalateToHuman"],
     },
   },
@@ -95,7 +97,7 @@ export const evalCases: EvalCase[] = [
       "Which store has that product?",
     ],
     assertions: {
-      responseContainsAny: [["Hanoi", "store-hn", "HN", "Hà Nội"]],
+      responseContainsAny: [["Hanoi", "store-hn", "HN"]],
       toolsCalled: ["checkInventory"],
     },
   },
@@ -110,5 +112,21 @@ export const evalCases: EvalCase[] = [
       responseContainsAny: [["0236"]],
       toolsCalled: ["lookupOrderStatus", "getStoreInfo"],
     },
+  },
+  {
+    name: "context_reconstruction_summarization",
+    description: "Long conversation triggers summarization of old turns within token budget",
+    turns: [
+      "Hi, my name is Alex.",
+      "Check order ORD-001 for me.",
+      "What about ORD-002?",
+      "Is SKU-100 in stock?",
+      "What are the Da Nang store hours? Store ID is store-dn",
+    ],
+    assertions: {
+      contextSummarized: true,
+      memoryKeysExist: ["customer_name"],
+    },
+    recentTurnsOverride: 2,
   },
 ];

@@ -1,4 +1,4 @@
-import { streamText } from "ai";
+import { streamText, stepCountIs } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { createTools, setSimulateFailure } from "./tools";
 import { extractAndSaveMemory } from "./memory";
@@ -7,9 +7,15 @@ import { saveMessage, logTurnMetrics } from "../db/queries";
 
 export { setSimulateFailure };
 
+export type AgentEvent =
+  | { type: "text-delta"; content: string }
+  | { type: "tool-call"; toolName: string; args: Record<string, unknown> }
+  | { type: "tool-result"; toolName: string; result: unknown };
+
 export async function runTurn(
   conversationId: string,
-  userMessage: string
+  userMessage: string,
+  onEvent?: (event: AgentEvent) => void
 ): Promise<string> {
   await saveMessage(conversationId, "user", userMessage);
 
@@ -24,16 +30,31 @@ export async function runTurn(
     system,
     messages,
     tools: createTools(conversationId),
-    maxSteps: 5,
+    stopWhen: stepCountIs(5),
     temperature: 0.3,
   });
 
   let fullResponse = "";
-  for await (const chunk of result.textStream) {
-    process.stdout.write(chunk);
-    fullResponse += chunk;
+  for await (const part of result.fullStream) {
+    if (part.type === "text-delta") {
+      if (onEvent) {
+        onEvent({ type: "text-delta", content: part.text });
+      } else {
+        process.stdout.write(part.text);
+      }
+      fullResponse += part.text;
+    } else if (part.type === "tool-call") {
+      if (onEvent) {
+        onEvent({ type: "tool-call", toolName: part.toolName, args: part.input as Record<string, unknown> });
+      }
+    } else if (part.type === "tool-result") {
+      if (onEvent) {
+        onEvent({ type: "tool-result", toolName: part.toolName, result: part.output });
+      }
+    }
   }
-  process.stdout.write("\n");
+
+  if (!onEvent) process.stdout.write("\n");
 
   const latencyMs = Date.now() - startTime;
   const usage = await result.usage;
@@ -43,8 +64,8 @@ export async function runTurn(
   await logTurnMetrics(
     conversationId,
     latencyMs,
-    usage?.promptTokens ?? 0,
-    usage?.completionTokens ?? 0
+    usage?.inputTokens ?? 0,
+    usage?.outputTokens ?? 0
   );
 
   return fullResponse;

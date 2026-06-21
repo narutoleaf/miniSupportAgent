@@ -2,6 +2,7 @@ import "dotenv/config";
 import { evalCases, type EvalCase } from "./cases";
 import { createConversation } from "../db/queries";
 import { runTurn, setSimulateFailure } from "../agent";
+import { buildContext } from "../agent/context";
 import { db } from "../db/client";
 
 type Result = {
@@ -65,6 +66,14 @@ async function checkAssertions(
     }
   }
 
+  if (evalCase.assertions.contextSummarized) {
+    const { messages } = await buildContext(conversationId);
+    const hasSummary = messages.some((m) => m.content.includes("[Previous conversation summary:"));
+    if (!hasSummary) {
+      failures.push("Context reconstruction did not trigger summarization");
+    }
+  }
+
   return failures;
 }
 
@@ -78,6 +87,11 @@ async function runEvalCase(evalCase: EvalCase): Promise<Result> {
     if (evalCase.simulateFailure) setSimulateFailure(true);
     else setSimulateFailure(false);
 
+    const origRecentTurns = process.env.RECENT_TURNS_VERBATIM;
+    if (evalCase.recentTurnsOverride !== undefined) {
+      process.env.RECENT_TURNS_VERBATIM = String(evalCase.recentTurnsOverride);
+    }
+
     const responses: string[] = [];
     for (const turn of evalCase.turns) {
       const response = await runTurn(conversationId, turn);
@@ -85,6 +99,8 @@ async function runEvalCase(evalCase: EvalCase): Promise<Result> {
     }
 
     setSimulateFailure(false);
+    if (origRecentTurns !== undefined) process.env.RECENT_TURNS_VERBATIM = origRecentTurns;
+    else delete process.env.RECENT_TURNS_VERBATIM;
 
     const assertionFailures = await checkAssertions(evalCase, responses, conversationId);
     failures.push(...assertionFailures);
