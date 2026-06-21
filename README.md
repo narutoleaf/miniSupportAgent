@@ -5,7 +5,7 @@ A tool-using customer support agent with persistent memory for retail store mana
 ## Demo
 
 
-https://github.com/user-attachments/assets/137154bd-646a-42b6-be8d-d1126574f6d8
+https://github-production-user-asset-6210df.s3.amazonaws.com/42489115/610883561-137154bd-646a-42b6-be8d-d1126574f6d8.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAVCODYLSA53PQK4ZA%2F20260621%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260621T152824Z&X-Amz-Expires=300&X-Amz-Signature=f3487a741cafe302a35fa2f9add519e0466158d4602e3e08e0ffbe4aaa54cecf&X-Amz-SignedHeaders=host&response-content-type=video%2Fmp4
 
 
 ## Architecture
