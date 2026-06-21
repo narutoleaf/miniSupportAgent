@@ -4,8 +4,9 @@ A tool-using customer support agent with persistent memory for retail store mana
 
 ## Demo
 
-<!-- Upload demo.mp4 to a GitHub issue, copy the generated URL, and paste it below -->
-<!-- GitHub auto-embeds videos from user-attachments URLs -->
+
+https://github.com/user-attachments/assets/137154bd-646a-42b6-be8d-d1126574f6d8
+
 
 ## Architecture
 
